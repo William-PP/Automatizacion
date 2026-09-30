@@ -1,0 +1,51 @@
+# --- Datos de contribuyentes: NUNCA versionar ---
+# Las exogenas (*Exogena*.xlsx) y los anexos generados contienen informacion
+# tributaria de terceros. Se ignoran por patron, sin excepcion.
+*.xlsx
+*.xls
+*.pdf
+
+# El modelo .xlsx NO se necesita en runtime: la plantilla congelada que dibuja
+# el anexo es generador_anexo/config/anexo_layout.json (ver README).
+# Unico .json que SI debe versionarse:
+!generador_anexo/config/anexo_layout.json
+
+# --- Artefactos derivados del modelo (opcionales, se regeneran) ---
+_estructura_modelo.json
+_estructura_modelo.txt
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --- Entornos virtuales ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Editores / SO ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# --- Temporales y respaldos ---
+*.log
+*.bak
+*.tmp
+*.orig
+~$*
+.~lock.*
