@@ -39,9 +39,10 @@ class Resultado:
     resumen: list                       # [(nombre_seccion, total)]
     salida: str                         # ruta final guardada
     salida_solicitada: str = ""         # ruta que se pidio (detecta respaldo)
-    encabezado: str = ""                # linea de identificacion (fila 2)
+    encabezado: str = ""                 # linea de identificacion (fila 2)
     actividad: str = ""                 # codigo de actividad economica (fila 3)
     archivo_exogena: str = ""
+    notas: list = field(default_factory=list)   # decisiones de negocio a revisar
 
 
 __all__ = ["LectorExogena", "EscritorAnexo", "Resultado",

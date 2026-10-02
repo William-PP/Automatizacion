@@ -62,6 +62,56 @@ REGLA_INGRESOS_TRABAJO = dict(
     nombre="Salarios/prestaciones/otros pagos -> Ingresos trabajo (R32)",
     match_e="R32", match_codigo="2276", fila=41, agregar="total")
 
+# --- Salarios, prestaciones y cesantias (concepto 2276) --------------------
+# Los cuatro rubros que pide la especificacion van al renglon 32, cada uno en
+# SU PROPIA fila de detalle para que se vea el desglose y no una sola suma.
+# Bloque 40 = "INGRESOS BRUTOS POR RENTAS DE TRABAJO (SALARIOS)"; su unica
+# fila de detalle en el modelo es la 41, asi que el planificador inserta las
+# que falten antes de "TOTAL SALARIOS" (fila 42).
+#
+# El match es codigo 2276 + texto del detalle: el codigo solo no alcanza,
+# porque salud, pensiones, cesantias pagadas y cesantias consignadas
+# comparten el 2276. Los anclas de texto son las de domain.cesantias.
+# `fila` fija el ORDEN dentro del bloque (el planificador ordena por fila).
+REGLA_SALARIOS = dict(
+    nombre="Pagos por salarios (R32) -> Salarios",
+    match_codigo="2276", match_c="Pagos por salarios",
+    fila=41, bloque=40, agregar="tercero",
+    plantilla_tercero="{tercero} (Pago por salarios)")
+
+REGLA_PRESTACIONES_SOCIALES = dict(
+    nombre="Pagos por prestaciones sociales (R32) -> Prestaciones sociales",
+    match_codigo="2276", match_c="Pagos por prestaciones sociales",
+    fila=42, bloque=40, agregar="tercero",
+    plantilla_tercero="{tercero} (Prestaciones Sociales)")
+
+REGLA_CESANTIAS_PAGADAS = dict(
+    nombre="Cesantias e intereses pagadas al empleado (R32) -> Cesantias",
+    match_codigo="2276",
+    match_c="Cesantías e intereses de cesantías pagadas al empleado",
+    fila=43, bloque=40, agregar="tercero",
+    plantilla_tercero="{tercero} (Cesantias e intereses)")
+
+# Cesantias consignadas al fondo: gravadas en R32 y 100% exentas en R36
+# (numeral 3 del Art. 206 E.T.). Las dos reglas anclan en el mismo texto;
+# domain.cesantias deduplica contra el reporte del fondo antes de mapear.
+REGLA_CESANTIAS_FONDO = dict(
+    nombre="Cesantias consignadas al fondo (R32) -> Cesantias al fondo",
+    match_codigo="2276", match_c="Cesantías consignadas al fondo de cesantías",
+    fila=44, bloque=40, agregar="tercero",
+    plantilla_tercero="{tercero} (Cesantias consignadas al fondo)")
+
+# Renglon 36 "OTRAS RENTAS EXENTAS" (laborales). Bloque 51, fila de detalle
+# 52. Se escribe con espejo=False para RESPETAR la formula del modelo
+# "=-(B52)": la renta exenta va en negativo y la resta de la renta liquida
+# (C57 = C47 + C52). Poner C = BPOSITIVO sumaria la exenta en vez de
+    # restarla.
+REGLA_CESANTIAS_FONDO_EXENTA = dict(
+    nombre="Cesantias consignadas al fondo (R36) -> Otras rentas exentas",
+    match_codigo="2276", match_c="Cesantías consignadas al fondo de cesantías",
+    fila=52, bloque=51, agregar="tercero", espejo=False, formula_c=None,
+    plantilla_tercero="{tercero} (Cesantias consignadas al fondo)")
+
 REGLA_SALUD_TRABAJADOR = dict(
     nombre="Aportes salud trabajador (R33) -> Aportes salud trabajo",
     match_c="salud", fila=45, agregar="total")
@@ -176,12 +226,20 @@ REGLA_SALDO_FAVOR = dict(
 
 # Orden importa: se evaluan en el orden de esta lista; gana la primera
 # regla que coincida con el concepto.
+#
+# REGLA_INGRESOS_TRABAJO va DESPUES de los cuatro rubros del 2276 porque es
+# un catch-all (match_e="R32" + codigo 2276): si fuera primero se llevaria
+# tambien los salarios, prestaciones y cesantias y no se verian desglosados.
 RULES = [
     REGLA_AVALUO,
     REGLA_AVALUO_VEHICULAR,
     REGLA_CUENTAS_POR_COBRAR,
     REGLA_BANCOS,
     REGLA_DEUDAS,
+    REGLA_SALARIOS,
+    REGLA_PRESTACIONES_SOCIALES,
+    REGLA_CESANTIAS_PAGADAS,
+    REGLA_CESANTIAS_FONDO,
     REGLA_INGRESOS_TRABAJO,
     REGLA_SALUD_TRABAJADOR,
     REGLA_PENSION_TRABAJADOR,
@@ -199,11 +257,24 @@ RULES = [
     REGLA_SALDO_FAVOR,
 ]
 
+# La exenta de cesantias (renglon 36) NO va en RULES: el mismo concepto 2276
+# ya lo captura REGLA_CESANTIAS_FONDO para el renglon 32 y el mapeo es
+# "gana la primera". El caso de uso deriva la fila exenta desde el total ya
+# deduplicado (ver domain.cesantias y application.caso_uso).
+EXENTA_CESANTIAS = REGLA_CESANTIAS_FONDO_EXENTA
+
 # Conceptos que NO tienen casilla en el anexo: solo referencia.
 INFO_PATTERNS = [
     "Total patrimonio bruto declarado en el año anterior",
     "Valor total de los movimientos en cuentas",
     "Total consumos o gastos con tarjeta",
+    # El 2276 lo reporta como apoyo del calculo del tope del Art. 206 E.T.
+    # No es un ingreso: se muestra como referencia y no se suma a ningun
+    # renglon (no se prorratea cesantias).
+    "Valor ingreso laboral promedio",
 ]
 
-__all__ = ["RULES", "INFO_PATTERNS", "REGLA_VENTA_ACTIVOS_FIJOS_MAS2"]
+__all__ = ["RULES", "INFO_PATTERNS", "EXENTA_CESANTIAS",
+           "REGLA_SALARIOS", "REGLA_PRESTACIONES_SOCIALES",
+           "REGLA_CESANTIAS_PAGADAS", "REGLA_CESANTIAS_FONDO",
+           "REGLA_VENTA_ACTIVOS_FIJOS_MAS2"]

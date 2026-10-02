@@ -9,12 +9,21 @@ inyectan desde la capa de presentacion (composicion).
 import os
 import re
 
+from ..config.reglas_anexo import EXENTA_CESANTIAS, REGLA_CESANTIAS_FONDO
 from ..config.settings import CARPETA
+from ..domain.cesantias import (RUBRO_CESANTIAS_FONDO, cesantias_exentas,
+                                nota_deduplicacion,
+                                unificar_cesantias_fondo)
 from ..domain.encabezado import componer_encabezado
 from ..domain.mapeo import agrupar, mapear
 from ..domain.reglas import (aplicar_subcontratacion, aplicar_venta_activos,
                              construir_reglas)
 from .puertos import EscritorAnexo, LectorExogena, Resultado
+
+
+def _rango(valor):
+    """Cifra con separador de miles, para los mensajes del dominio."""
+    return f"{valor:,.0f}"
 
 
 def _limpiar_nombre(nombres: str) -> str:
@@ -53,6 +62,42 @@ def construir_resumen(por_regla):
     return sorted(usado.items(), key=lambda x: -x[1])
 
 
+def agregar_exenta_cesantias(por_regla):
+    """Anade al renglon 36 la renta exenta de las cesantias al fondo.
+
+    El mismo concepto 2276 que entra al renglon 32 tambien es renta exenta
+    (numeral 3 del Art. 206 E.T.), pero `mapear` es "gana la primera regla" y
+    ese concepto ya quedo asignado a REGLA_CESANTIAS_FONDO. Aqui se deriva la
+    fila del renglon 36 a partir del MISMO total ya deduplicado, de modo que
+    el gravado y la exenta nunca puedan discrepar.
+
+    Las cesantias pagadas directamente NO aportan exenta: la exogena no las
+    marca como tales y no trae el promedio salarial que el Art. 206 exige
+    para el tope, asi que no se prorratea (ver domain.cesantias).
+
+    Si el Rubro no esta en la exogena, no se crea la fila: una exenta en 0
+    ensuciaria el renglon 36 sin aportar nada.
+    """
+    # Nombre EXACTO de la regla del renglon 32: la del renglon 36 empieza con
+    # el mismo texto, asi que un match por contenido los confundiria.
+    nombre_r32 = REGLA_CESANTIAS_FONDO["nombre"]
+
+    exenta_total = 0.0
+    grupos_exenta = []
+    for regla, grupos in por_regla:
+        if regla.nombre != nombre_r32:
+            continue
+        for tercero, valor in grupos:
+            exento = cesantias_exentas(RUBRO_CESANTIAS_FONDO, valor)
+            if exento:
+                exenta_total += exento
+                grupos_exenta.append((tercero, exento))
+    if not grupos_exenta:
+        return por_regla, 0.0
+    return por_regla + [(construir_reglas([EXENTA_CESANTIAS])[0],
+                         grupos_exenta)], exenta_total
+
+
 def procesar_anexo(lector: LectorExogena, escritor: EscritorAnexo,
                    exo_file: str, salida: str = "",
                    actividad: str = "", encabezado: str = "",
@@ -88,14 +133,31 @@ def procesar_anexo(lector: LectorExogena, escritor: EscritorAnexo,
     defs = aplicar_subcontratacion(reglas_def, subcontrato_2_mas)
     reglas = construir_reglas(aplicar_venta_activos(defs,
                                                     venta_activos_mas_2_anos))
-    asignados, no_mapeados = mapear(informe.conceptos, reglas, info_patterns)
+
+    # Las cesantias consignadas llegan dos veces (empleador 2276 y fondo).
+    # Se deja un solo registro ANTES de mapear, para que ni el renglon 32 ni
+    # el 36 sumen el mismo dinero dos veces.
+    conceptos, descartados = unificar_cesantias_fondo(informe.conceptos,
+                                                      _rango)
+    asignados, no_mapeados = mapear(conceptos, reglas, info_patterns)
     por_regla = agrupar(asignados)
+    por_regla, exenta_cesantias = agregar_exenta_cesantias(por_regla)
 
     total_ret, n_ret = extraer_retenciones(por_regla)
     salida_final = escritor.escribir(salida, por_regla,
                                      total_ret, n_ret,
                                      encabezado=encabezado,
                                      actividad=actividad)
+
+    notas = []
+    nota_dedup = nota_deduplicacion(descartados, _rango)
+    if nota_dedup:
+        notas.append(nota_dedup)
+    if exenta_cesantias:
+        notas.append(
+            f"R36 otras rentas exentas (Art. 206 num. 3 E.T.): "
+            f"{_rango(exenta_cesantias)} de cesantias consignadas al fondo, "
+            "exentas al 100% sin prorrateo.")
 
     return Resultado(
         topes=informe.topes,
@@ -107,8 +169,9 @@ def procesar_anexo(lector: LectorExogena, escritor: EscritorAnexo,
         encabezado=encabezado,
         actividad=actividad,
         archivo_exogena=exo_file,
+        notas=notas,
     )
 
 
 __all__ = ["procesar_anexo", "construir_resumen", "extraer_retenciones",
-           "construir_nombre_salida"]
+           "agregar_exenta_cesantias", "construir_nombre_salida"]

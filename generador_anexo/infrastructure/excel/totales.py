@@ -23,6 +23,20 @@ def recalcular_totales(ws):
                 return r
         return None
 
+    def fin_detalle(base, cierres):
+        """Ultima fila del bloque de detalle que sigue a `base`.
+
+        Las filas de detalle las escribe el generador y llevan su propia
+        descripcion en la columna A, asi que no se distinguen de un titulo
+        por tener o no texto. El corte se hace por los titulos CONOCIDOS que
+        cierran el bloque, que son fijos de la plantilla.
+        """
+        for r in range(base + 1, ws.max_row + 1):
+            v = ws.cell(r, 1).value
+            if isinstance(v, str) and v.strip() in cierres:
+                return r - 1
+        return ws.max_row
+
     pt = buscar("TOTAL PATRIMONIO BRUTO")
     pat = buscar("PATRIMONIO")      # inicio de la seccion de patrimonio
     if pt and pat:
@@ -60,6 +74,40 @@ def recalcular_totales(ws):
     renta_liq = compras and buscar_despues("RENTA LIQUIDA", compras)
     if nolab_tot and compras and renta_liq:
         ws.cell(renta_liq, 3).value = f"=C{nolab_tot}+C{compras}"
+
+    # --- RENTAS DE TRABAJO -------------------------------------------------
+    # "INGRESOS BRUTOS POR RENTAS DE TRABAJO (SALARIOS)" abre el bloque de
+    # detalle (fila 41 en la plantilla) y lo cierra "TOTAL SALARIOS". El
+    # detalle son varias filas (salarios, prestaciones, cesantias...), asi que
+    # el total se arma con SUM en vez de quedar la referencia a una sola fila.
+    trab = buscar("INGRESOS BRUTOS POR RENTAS DE TRABAJO (SALARIOS)")
+    trab_tot = trab and buscar_despues("TOTAL SALARIOS", trab)
+    if trab and trab_tot:
+        ws.cell(trab_tot, 3).value = f"=SUM(C{trab + 1}:C{trab_tot - 1})"
+
+    # "RENTA LIQUIDA" de las laborales. En la plantilla su formula era
+    # "=C42", apuntando a la UNICA fila de detalle del bloque; con varias
+    # filas de detalle (salarios, prestaciones, cesantias) esa referencia
+    # solo sumaria la primera. Se reapunta al TOTAL SALARIOS, que es lo que
+    # la plantilla queria expresar: el total del bloque de rentas de
+    # trabajo. Se toma la primera "RENTA LIQUIDA" despues del bloque, que es
+    # la de las laborales (las demas secciones traen otros titulos).
+    rl_trab = trab_tot and buscar_despues("RENTA LIQUIDA", trab_tot)
+    if trab_tot and rl_trab:
+        ws.cell(rl_trab, 3).value = f"=C{trab_tot}"
+
+    # "OTRAS RENTAS EXENTAS" (laborales): su celda viene en 0 en la plantilla
+    # y hay que igualarla al detalle que se escribio (cesantias consignadas
+    # al fondo exentas, Art. 206 num. 3 E.T.). Se toma la PRIMERA
+    # ocurrencia, que es la de las laborales; el bloque de honorarios tiene su
+    # propio par de titulos mas abajo. El rango se corta en "INTERESES DE
+    # VIVIENDA": las filas que siguen ya traen su propia celda y meterlas
+    # dentro de la exenta las sumaria de mas.
+    exentas = buscar("OTRAS RENTAS EXENTAS")
+    if exentas:
+        fin = fin_detalle(exentas, ("INTERESES DE VIVIENDA",))
+        if fin > exentas:
+            ws.cell(exentas, 3).value = f"=SUM(C{exentas + 1}:C{fin})"
 
 
 def ajustes_retenciones(ws, total_ret, n_ret):

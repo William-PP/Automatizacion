@@ -55,6 +55,12 @@ def construir_reporte(res) -> str:
     for nombre, total in res.resumen:
         lineas.append(f"  {total:>16,.0f}  {nombre}")
 
+    if getattr(res, "notas", None):
+        lineas.append("")
+        lineas.append("NOTAS DE TRATAMIENTO")
+        for nota in res.notas:
+            lineas.append(f"  - {nota}")
+
     if res.salida != res.salida_solicitada:
         lineas.append("")
         lineas.append("OJO: el archivo con la fecha de hoy estaba abierto en Excel,")
