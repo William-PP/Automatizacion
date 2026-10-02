@@ -7,7 +7,8 @@ que la API historica del paquete menos el modelo (ya no se usa):
     reporte, salida, resumen = procesar(exo_file, salida)
 
 Tambien expone `leer_encabezado` y `leer_nombre_salida` para que la GUI
-pueda pre-llenar datos al elegir un archivo.
+pueda pre-llenar datos al elegir un archivo, y `leer_preliminares`, que
+devuelve ambos con una sola lectura del libro.
 """
 
 from ..application.caso_uso import (construir_nombre_salida, procesar_anexo)
@@ -33,23 +34,29 @@ def procesar(exo_file, salida, actividad="", encabezado="",
     return construir_reporte(resultado), resultado.salida, resultado.resumen
 
 
+def leer_preliminares(exo_file):
+    """Devuelve (linea_identificacion, nombre_sugerido) con una sola lectura
+    del libro, para que la GUI no abra el .xlsx dos veces por cada exogena
+    elegida. Ambas salidas son cadena vacia si el archivo no trae consultante."""
+    informe = LectorExogenaExcel().leer(exo_file)
+    if not informe.consultante:
+        return "", ""
+    return (componer_encabezado(informe.consultante),
+            construir_nombre_salida(informe.consultante))
+
+
 def leer_encabezado(exo_file):
     """Devuelve la linea de identificacion del consultante para pre-llenar
     la GUI (o cadena vacia si el archivo no la trae)."""
-    informe = LectorExogenaExcel().leer(exo_file)
-    if informe.consultante:
-        return componer_encabezado(informe.consultante)
-    return ""
+    return leer_preliminares(exo_file)[0]
 
 
 def leer_nombre_salida(exo_file):
     """Devuelve el nombre de archivo sugerido desde el consultante
     (Anexo_Declaracion_de_renta_<Nombre>).xlsx, o cadena vacia si el
     archivo no trae consultante (para preguntarlo manualmente en la GUI)."""
-    informe = LectorExogenaExcel().leer(exo_file)
-    if informe.consultante:
-        return construir_nombre_salida(informe.consultante)
-    return ""
+    return leer_preliminares(exo_file)[1]
 
 
-__all__ = ["procesar", "leer_encabezado", "leer_nombre_salida"]
+__all__ = ["procesar", "leer_encabezado", "leer_nombre_salida",
+           "leer_preliminares"]
